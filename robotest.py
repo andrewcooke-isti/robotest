@@ -5,5 +5,5 @@ class RoboTest:
         self.__magic = magic
 
     def is_magic(self, magic):
-        assert self.magic == magic, "That wasn't right"
+        assert self.__magic == magic, "That wasn't right"
 
