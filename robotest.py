@@ -13,9 +13,11 @@ LOCAL_RESULT = '/apps/data/robot/local-result.txt'
 
 class RoboTest:
 
-    def __init__(self, master='dlv020', cnxn='cats_idcx/password@XE'):
+    def __init__(self, master='dlv020', cnxn='cats_idcx/password@XE', 
+                 debug=False):
         self.cnxn = cnxn
         self.master = master
+        self.debug = debug
 
     def test(self):
         self.clean()
@@ -30,12 +32,15 @@ class RoboTest:
         finally:
             self.clean()
 
+    def log(self, string):
+        if self.debug: print(string)
+
     def clean(self):
         if exists(LOCAL_RESULT): unlink(LOCAL_RESULT)
         if exists(LOCAL_TARGET): unlink(LOCAL_TARGET)
         
     def measure_db(self):
-        print('writing database stats to %s' % LOCAL_RESULT)
+        self.log('writing database stats to %s' % LOCAL_RESULT)
         out, con, cur = None, None, None
         try:
             out = open(LOCAL_RESULT, 'w')
@@ -49,22 +54,22 @@ class RoboTest:
             if out: out.close()
 
     def compare(self):
-        print('comparing %s %s' % (LOCAL_RESULT, LOCAL_TARGET))
+        self.log('comparing %s %s' % (LOCAL_RESULT, LOCAL_TARGET))
         call('diff %s %s' % (LOCAL_TARGET, LOCAL_RESULT), shell=True)
         
     def copy_prev(self):
-        print('retrieving %s from %s:%s' % 
-              (LOCAL_TARGET, self.master, REMOTE_TARGET))
+        self.log('retrieving %s from %s:%s' % 
+                 (LOCAL_TARGET, self.master, REMOTE_TARGET))
         try:
             check_call('scp %s:%s %s &> /dev/null' % 
                        (self.master, REMOTE_TARGET, LOCAL_TARGET),
                        shell=True)
         except:
-            print('could not copy %s:%s - assuming starting from zero' %
-                  (self.master, REMOTE_TARGET))
+            self.log('could not copy %s:%s - assuming starting from zero' %
+                     (self.master, REMOTE_TARGET))
         
     def copy_new(self):
-        print('saving %s as new reference' % LOCAL_RESULT)
+        self.log('saving %s as new reference' % LOCAL_RESULT)
         check_call('scp %s %s:%s &> /dev/null' % 
                    (LOCAL_RESULT, self.master, REMOTE_TARGET), 
                    shell=True)
