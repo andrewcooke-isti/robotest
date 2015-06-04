@@ -1,9 +1,78 @@
 
+from __future__ import print_function
+from cx_Oracle import connect
+from subprocess import call, check_call
+from sys import argv
+from os import unlink
+from os.path import exists
+
+REMOTE_TARGET = '/apps/data/robot/global-target.txt'
+LOCAL_TARGET = '/apps/data/robot/local-target.txt'
+LOCAL_RESULT = '/apps/data/robot/local-result.txt'
+
+
 class RoboTest:
 
-    def __init__(self, magic):
-        self.__magic = magic
+    def __init__(self, master='dlv020', cnxn='cats_idcx/password@XE'):
+        self.cnxn = cnxn
+        self.master = master
 
-    def is_magic(self, magic):
-        assert self.__magic == magic, "That wasn't right"
+    def test(self):
+        self.clean()
+        try:
+            self.copy_prev()
+            target_exists = exists(LOCAL_TARGET)
+            self.measure_db()
+            if target_exists:
+                self.compare()
+            else:
+                self.copy_new()
+        finally:
+            self.clean()
 
+    def clean(self):
+        if exists(LOCAL_RESULT): unlink(LOCAL_RESULT)
+        if exists(LOCAL_TARGET): unlink(LOCAL_TARGET)
+        
+    def measure_db(self):
+        print('writing database stats to %s' % LOCAL_RESULT)
+        out, con, cur = None, None, None
+        try:
+            out = open(LOCAL_RESULT, 'w')
+            con = connect(self.cnxn)
+            cur = con.cursor()
+            result = cur.execute('select count(*) from arrival').fetchall()
+            print('count(arrival): %s' % result, file=out)
+        finally:
+            if cur: cur.close()
+            if con: con.close()
+            if out: out.close()
+
+    def compare(self):
+        print('comparing %s %s' % (LOCAL_RESULT, LOCAL_TARGET))
+        call('diff %s %s' % (LOCAL_TARGET, LOCAL_RESULT), shell=True)
+        
+    def copy_prev(self):
+        print('retrieving %s from %s:%s' % 
+              (LOCAL_TARGET, self.master, REMOTE_TARGET))
+        try:
+            check_call('scp %s:%s %s &> /dev/null' % 
+                       (self.master, REMOTE_TARGET, LOCAL_TARGET),
+                       shell=True)
+        except:
+            print('could not copy %s:%s - assuming starting from zero' %
+                  (self.master, REMOTE_TARGET))
+        
+    def copy_new(self):
+        print('saving %s as new reference' % LOCAL_RESULT)
+        check_call('scp %s %s:%s &> /dev/null' % 
+                   (LOCAL_RESULT, self.master, REMOTE_TARGET), 
+                   shell=True)
+
+
+if __name__ == '__main__':
+    kargs = {}
+    if len(argv) > 1: kargs['master'] = argv[1]
+    if len(argv) > 2: kargs['cnxn'] = argv[2]
+    test = RoboTest(**kargs)
+    test.test()
