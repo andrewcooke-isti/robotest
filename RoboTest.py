@@ -93,5 +93,6 @@ if __name__ == '__main__':
     kargs = {}
     if len(argv) > 1: kargs['master'] = argv[1]
     if len(argv) > 2: kargs['cnxn'] = argv[2]
+    if len(argv) > 3: kargs['debug'] = argv[3]
     test = RoboTest(**kargs)
     test.test()
