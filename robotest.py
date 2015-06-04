@@ -55,7 +55,11 @@ class RoboTest:
 
     def compare(self):
         self.log('comparing %s %s' % (LOCAL_RESULT, LOCAL_TARGET))
-        call('diff %s %s' % (LOCAL_TARGET, LOCAL_RESULT), shell=True)
+        try:
+            check_call('diff %s %s' % (LOCAL_TARGET, LOCAL_RESULT), shell=True)
+            print("Test passed")
+        except:
+            print("Test failed")
         
     def copy_prev(self):
         self.log('retrieving %s from %s:%s' % 
