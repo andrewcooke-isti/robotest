@@ -35,7 +35,7 @@ class RoboTest:
             self.init_db()
             self.record_sql('line count for %s' % table,
                             'select count(*) from %s' % table)
-            if self.target_exists(file)
+            if self.target_exists(file):
                 self.compare(file)
             else:
                 self.copy_new(file)
