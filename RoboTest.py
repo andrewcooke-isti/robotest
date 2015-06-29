@@ -60,6 +60,23 @@ class RoboTest:
         finally:
             self.clean(file)
 
+    def grep_file(self, infile, file, field):
+        self.clean(file)
+        try:
+            self.init_file(file)
+            inp = open(infile, 'r')
+            for line in inp:
+                if field.lower() in line.lower():
+                    print(line.strip(), file=self.out)
+            inp.close()
+            self.close()
+            if self.target_exists(file):
+                self.compare(file)
+            else:
+                self.copy_new(file)
+        finally:
+            self.clean(file)
+
 
     # support -----------------------------------------------------------------
 
