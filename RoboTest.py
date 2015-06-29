@@ -96,8 +96,8 @@ class RoboTest:
         self.out = open(join(LOCAL_RESULT, file), 'w')
         
     def record_sql(self, label, sql):
-        result = self.cur.execute(sql)
-        print('label: %s' % result, file=self.out)
+        result = self.cur.execute(sql).fetchall()
+        print('%s: %s' % (label, result), file=self.out)
                 
     def compare(self, file):
         self.log('comparing %s %s' % 
