@@ -50,7 +50,8 @@ class RoboTest:
             self.init_db()
             field_names = ','.join(fields)
             self.record_sql('%s for %s' % (field_names, table),
-                            'select %s from %s' % (field_names, table))
+                            'select %s from %s order by %s' % 
+                            (field_names, table, field_names))
             self.close()
             if self.target_exists(file):
                 self.compare(file)
