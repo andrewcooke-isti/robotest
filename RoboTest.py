@@ -4,61 +4,94 @@ from cx_Oracle import connect
 from subprocess import call, check_call
 from sys import argv, stderr
 from os import unlink
-from os.path import exists
+from os.path import exists, join
 
-REMOTE_TARGET = '/apps/data/robot/global-target.txt'
-LOCAL_TARGET = '/apps/data/robot/local-target.txt'
-LOCAL_RESULT = '/apps/data/robot/local-result.txt'
+REMOTE_TARGET = '/apps/data/robot/global-target-dir'
+LOCAL_TARGET = '/apps/data/robot/local-target-dir'
+LOCAL_RESULT = '/apps/data/robot/local-result-dir'
 DIFF_OUT = '/apps/data/robot/diff.txt'
+
 
 class RoboTest:
 
     def __init__(self, master='dlv020', cnxn='cats_idcx/password@XE', 
                  debug=False):
-        self.cnxn = cnxn
         self.master = master
+        self.cnxn = cnxn
         self.debug = debug
+        # database state - cleaned up in self.close()
+        self.con = None
+        self.cur = None
+        # output stream - cleaned up in self.close()
+        self.out = None
 
-    def test(self):
-        self.clean()
+
+    # tests -------------------------------------------------------------------
+
+    def count_lines(self, table, file):
+        self.clean(file)
         try:
-            self.copy_prev()
-            target_exists = exists(LOCAL_TARGET)
-            self.measure_db()
-            if target_exists:
-                self.compare()
+            self.init_file(file)
+            self.init_db()
+            self.record_sql('line count for %s' % table,
+                            'select count(*) from %s' % table)
+            if self.target_exists(file)
+                self.compare(file)
             else:
-                self.copy_new()
+                self.copy_new(file)
         finally:
-            self.clean()
+            self.clean(file)
+
+    def select_fields(self, table, file, *fields):
+        self.clean(file)
+        try:
+            self.init_file(file)
+            self.init_db()
+            field_names = ','.join(fields)
+            self.record_sql('%s for %s' % (field_names, table),
+                            'select %s from %s' % (field_names, table))
+            if self.target_exists(file)
+                self.compare(file)
+            else:
+                self.copy_new(file)
+        finally:
+            self.clean(file)
+
+
+    # support -----------------------------------------------------------------
 
     def log(self, string):
         if self.debug: print(string, file=stderr)
 
-    def clean(self):
-        if exists(LOCAL_RESULT): unlink(LOCAL_RESULT)
-        if exists(LOCAL_TARGET): unlink(LOCAL_TARGET)
-        if exists(DIFF_OUT): unlink(DIFF_OUT)
-        
-    def measure_db(self):
-        self.log('writing database stats to %s' % LOCAL_RESULT)
-        out, con, cur = None, None, None
-        try:
-            out = open(LOCAL_RESULT, 'w')
-            con = connect(self.cnxn)
-            cur = con.cursor()
-            result = cur.execute('select count(*) from arrival').fetchall()
-            print('count(arrival): %s' % result, file=out)
-        finally:
-            if cur: cur.close()
-            if con: con.close()
-            if out: out.close()
+    def target_exists(self, file):
+        return exists(join(LOCAL_TARGET, file))
 
-    def compare(self):
-        self.log('comparing %s %s' % (LOCAL_RESULT, LOCAL_TARGET))
+    def clean(self, file):
+        if exists(join(LOCAL_RESULT, file)): unlink(join(LOCAL_RESULT, file))
+        if exists(join(LOCAL_TARGET, file)): unlink(join(LOCAL_TARGET, file))
+        if exists(DIFF_OUT): unlink(DIFF_OUT)
+
+    def close(self):
+        if self.out: self.out.close()
+        if self.cur: self.cur.close()
+        if self.con: self.con.close()
+
+    def init_db(self):
+        self.con = connect(self.cnxn)
+        self.cur = self.con.cursor()
+
+    def record_sql(self, label, sql):
+        result = self.cur.execute(sql)
+        print('label: %s' % result, file=self.out)
+                
+    def compare(self, file):
+        self.log('comparing %s %s' % 
+                 (join(LOCAL_RESULT, file), join(LOCAL_TARGET, file)))
         try:
             check_call('diff %s %s > %s' % 
-                       (LOCAL_TARGET, LOCAL_RESULT, DIFF_OUT), shell=True)
+                       (join(LOCAL_TARGET, file), 
+                        join(LOCAL_RESULT, file), 
+                        DIFF_OUT), shell=True)
             print("Test passed", file=stderr)
         except:
             print("Test failed", file=stderr)
@@ -71,23 +104,28 @@ class RoboTest:
                 if inp: inp.close()
                 raise Exception(text)
         
-    def copy_prev(self):
+    def init_file(self, file):
         self.log('retrieving %s from %s:%s' % 
-                 (LOCAL_TARGET, self.master, REMOTE_TARGET))
+                 (file, self.master, join(REMOTE_TARGET, file)))
         try:
             check_call('scp %s:%s %s &> /dev/null' % 
-                       (self.master, REMOTE_TARGET, LOCAL_TARGET),
+                       (self.master, join(REMOTE_TARGET, file), 
+                        join(LOCAL_TARGET, file)),
                        shell=True)
         except:
             self.log('could not copy %s:%s - assuming starting from zero' %
-                     (self.master, REMOTE_TARGET))
+                     (self.master, join(REMOTE_TARGET, file)))
+        self.out = open(join(LOCAL_RESULT, file), 'w')
         
-    def copy_new(self):
-        self.log('saving %s as new reference' % LOCAL_RESULT)
+    def copy_new(self, file):
+        self.log('saving %s as new reference' % join(LOCAL_RESULT, file))
         check_call('scp %s %s:%s &> /dev/null' % 
-                   (LOCAL_RESULT, self.master, REMOTE_TARGET), 
+                   (join(LOCAL_RESULT, file), self.master, 
+                    join(REMOTE_TARGET, file)), 
                    shell=True)
         raise Exception('Copied results as new reference')
+
+
 
 if __name__ == '__main__':
     kargs = {}
