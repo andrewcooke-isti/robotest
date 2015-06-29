@@ -35,6 +35,7 @@ class RoboTest:
             self.init_db()
             self.record_sql('line count for %s' % table,
                             'select count(*) from %s' % table)
+            self.close()
             if self.target_exists(file):
                 self.compare(file)
             else:
@@ -50,6 +51,7 @@ class RoboTest:
             field_names = ','.join(fields)
             self.record_sql('%s for %s' % (field_names, table),
                             'select %s from %s' % (field_names, table))
+            self.close()
             if self.target_exists(file):
                 self.compare(file)
             else:
@@ -80,6 +82,19 @@ class RoboTest:
         self.con = connect(self.cnxn)
         self.cur = self.con.cursor()
 
+    def init_file(self, file):
+        self.log('retrieving %s from %s:%s' % 
+                 (file, self.master, join(REMOTE_TARGET, file)))
+        try:
+            check_call('scp %s:%s %s &> /dev/null' % 
+                       (self.master, join(REMOTE_TARGET, file), 
+                        join(LOCAL_TARGET, file)),
+                       shell=True)
+        except:
+            self.log('could not copy %s:%s - assuming starting from zero' %
+                     (self.master, join(REMOTE_TARGET, file)))
+        self.out = open(join(LOCAL_RESULT, file), 'w')
+        
     def record_sql(self, label, sql):
         result = self.cur.execute(sql)
         print('label: %s' % result, file=self.out)
@@ -103,19 +118,6 @@ class RoboTest:
             finally:
                 if inp: inp.close()
                 raise Exception(text)
-        
-    def init_file(self, file):
-        self.log('retrieving %s from %s:%s' % 
-                 (file, self.master, join(REMOTE_TARGET, file)))
-        try:
-            check_call('scp %s:%s %s &> /dev/null' % 
-                       (self.master, join(REMOTE_TARGET, file), 
-                        join(LOCAL_TARGET, file)),
-                       shell=True)
-        except:
-            self.log('could not copy %s:%s - assuming starting from zero' %
-                     (self.master, join(REMOTE_TARGET, file)))
-        self.out = open(join(LOCAL_RESULT, file), 'w')
         
     def copy_new(self, file):
         self.log('saving %s as new reference' % join(LOCAL_RESULT, file))
