@@ -14,6 +14,7 @@ DIFF_OUT = '/apps/data/robot/diff.txt'
 
 class RoboTest:
 
+
     def __init__(self, master='dlv020', cnxn='cats_idcx/password@XE', 
                  debug=False):
         self.master = master
@@ -30,52 +31,43 @@ class RoboTest:
 
     def count_lines(self, table, file):
         self.clean(file)
-        try:
-            self.init_file(file)
-            self.init_db()
-            self.record_sql('line count for %s' % table,
-                            'select count(*) from %s' % table)
-            self.close()
-            if self.target_exists(file):
-                self.compare(file)
-            else:
-                self.copy_new(file)
-        finally:
-            self.clean(file)
+        self.init_file(file)
+        self.init_db()
+        self.record_sql('line count for %s' % table,
+                        'select count(*) from %s' % table)
+        self.close()
+        if self.target_exists(file):
+            self.compare(file)
+        else:
+            self.copy_new(file)
 
     def select_fields(self, table, file, *fields):
         self.clean(file)
-        try:
-            self.init_file(file)
-            self.init_db()
-            field_names = ','.join(fields)
-            self.record_sql('%s for %s' % (field_names, table),
-                            'select %s from %s order by %s' % 
-                            (field_names, table, field_names))
-            self.close()
-            if self.target_exists(file):
-                self.compare(file)
-            else:
-                self.copy_new(file)
-        finally:
-            self.clean(file)
+        self.init_file(file)
+        self.init_db()
+        field_names = ','.join(fields)
+        self.record_sql('%s for %s' % (field_names, table),
+                        'select %s from %s order by %s' % 
+                        (field_names, table, field_names))
+        self.close()
+        if self.target_exists(file):
+            self.compare(file)
+        else:
+            self.copy_new(file)
 
     def grep_file(self, infile, file, field):
         self.clean(file)
-        try:
-            self.init_file(file)
-            inp = open(infile, 'r')
-            for line in inp:
-                if field.lower() in line.lower():
-                    print(line.strip(), file=self.out)
-            inp.close()
-            self.close()
-            if self.target_exists(file):
-                self.compare(file)
-            else:
-                self.copy_new(file)
-        finally:
-            self.clean(file)
+        self.init_file(file)
+        inp = open(infile, 'r')
+        for line in inp:
+            if field.lower() in line.lower():
+                print(line.strip(), file=self.out)
+        inp.close()
+        self.close()
+        if self.target_exists(file):
+            self.compare(file)
+        else:
+            self.copy_new(file)
 
 
     # support -----------------------------------------------------------------
@@ -143,7 +135,6 @@ class RoboTest:
                    (join(LOCAL_RESULT, file), self.master, 
                     join(REMOTE_TARGET, file)), 
                    shell=True)
-        raise Exception('Copied results as new reference')
 
 
 
