@@ -110,10 +110,10 @@ class RoboTest:
         try:
             self.cur.execute(sql)
             cols = [d[0] for d in self.cur.description]
-            for j, row in enumerate(self.cur):
+            for j, row in enumerate(self.cur, start=1):
                 line = '%3d |' % j
                 for i, col in enumerate(cols):
-                    if i > 1: line = line + ";"
+                    if i: line = line + ";"
                     line = line + ' %s: %s' % (col, row[i])
                 print(line, file=self.out)
         except e:
