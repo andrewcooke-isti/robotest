@@ -135,7 +135,7 @@ class RoboTest:
             try:
                 inp = open(DIFF_OUT, 'r')
                 lines = inp.readlines()
-                if length(lines) > 5:
+                if len(lines) > 5:
                     text = ''.join(lines[:4]) + "..."
                 else:
                     text = ''.join(lines)
