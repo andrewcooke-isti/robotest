@@ -117,9 +117,6 @@ class RoboTest:
                 print(data, file=self.out)
         except e:
             print(e, file=self.out)
-        
-        print('%s: %s' % (label, result), file=self.out)
-
                 
     def compare(self, file):
         self.log('comparing %s %s' % 
