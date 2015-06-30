@@ -123,7 +123,7 @@ class RoboTest:
         self.log('comparing %s %s' % 
                  (join(LOCAL_RESULT, file), join(LOCAL_TARGET, file)))
         try:
-            check_call('diff -y --suppress-common-lines %s %s | head -10 > %s' % 
+            check_call('diff -y --suppress-common-lines %s %s > %s' % 
                        (join(LOCAL_TARGET, file), 
                         join(LOCAL_RESULT, file), 
                         DIFF_OUT), shell=True)
@@ -134,7 +134,11 @@ class RoboTest:
             inp = None
             try:
                 inp = open(DIFF_OUT, 'r')
-                text = inp.read()
+                lines = inp.readlines()
+                if length(lines) > 5:
+                    text = ''.join(lines[:4]) + "..."
+                else:
+                    text = ''.join(lines)
             finally:
                 if inp: inp.close()
                 raise Exception(text)
