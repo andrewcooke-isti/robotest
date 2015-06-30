@@ -111,7 +111,7 @@ class RoboTest:
             self.cur.execute(sql)
             cols = [d[0] for d in self.cur.description]
             for j, row in enumerate(self.cur):
-                line = '%3d | ' % j
+                line = '%3d |' % j
                 for i, col in enumerate(cols):
                     if i > 1: line = line + ";"
                     line = line + ' %s: %s' % (col, row[i])
