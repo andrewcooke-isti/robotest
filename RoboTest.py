@@ -123,7 +123,7 @@ class RoboTest:
         self.log('comparing %s %s' % 
                  (join(LOCAL_RESULT, file), join(LOCAL_TARGET, file)))
         try:
-            check_call('diff -y %s %s > %s' % 
+            check_call('diff -y --suppress-common-lines %s %s | head 10 > %s' % 
                        (join(LOCAL_TARGET, file), 
                         join(LOCAL_RESULT, file), 
                         DIFF_OUT), shell=True)
