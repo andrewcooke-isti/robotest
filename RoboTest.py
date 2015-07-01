@@ -157,13 +157,17 @@ class RoboTest:
                     if len(trow) != len(rrow):
                         raise Exception("result file format changed")
                     for (tval, rval) in zip(trow, rrow):
-                        if type(tval) != type(rval):
-                            raise Exception("type changed for %s/%s" % (tval, rval))
                         if tval != rval:
-                            if isinstance(tval, float):
+                            try:
+                                # if we can convert to float and they are
+                                # close enough, skip any error
+                                tval = float(tval)
+                                rval = float(rval)
                                 big = max(abs(tval), abs(rval))
                                 if abs(tval - rval) / big < delta:
                                     continue
+                            except:
+                                pass
                             raise Exception("%s != %s" % (tval, rval))
 
     def copy_new(self, file):
