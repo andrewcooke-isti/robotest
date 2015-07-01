@@ -156,7 +156,7 @@ class RoboTest:
                     if rrow is None: raise Exception("no result for %s", trow)
                     if len(trow) != len(rrow):
                         raise Exception("result file format changed")
-                    for (tval, rval) in zip(trow, vrow):
+                    for (tval, rval) in zip(trow, rrow):
                         if type(tval) != type(rval):
                             raise Exception("type changed for %s/%s" % (tval, rval))
                         if tval != rval:
