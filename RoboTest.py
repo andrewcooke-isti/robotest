@@ -5,6 +5,7 @@ from subprocess import call, check_call
 from sys import argv, stderr
 from os import unlink
 from os.path import exists, join
+from csv import reader, writer
 
 REMOTE_TARGET = '/apps/data/robot/global-target-dir'
 LOCAL_TARGET = '/apps/data/robot/local-target-dir'
