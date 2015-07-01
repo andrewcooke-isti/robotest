@@ -38,7 +38,7 @@ class RoboTest:
                         'select count(*) from %s' % table)
         self.close()
         if self.target_exists(file):
-            self.compare(file)
+            self.compare_csv(file)
         else:
             self.copy_new(file)
 
@@ -52,7 +52,7 @@ class RoboTest:
                         (field_names, table, field_names))
         self.close()
         if self.target_exists(file):
-            self.compare(file)
+            self.compare_csv(file)
         else:
             self.copy_new(file)
 
@@ -66,7 +66,7 @@ class RoboTest:
         inp.close()
         self.close()
         if self.target_exists(file):
-            self.compare(file)
+            self.compare_diff(file)
         else:
             self.copy_new(file)
 
@@ -120,7 +120,7 @@ class RoboTest:
         except e:
             w.writerow([e])
                 
-    def compare(self, file):
+    def compare_diff(self, file):
         self.log('comparing %s %s' % 
                  (join(LOCAL_RESULT, file), join(LOCAL_TARGET, file)))
         try:
@@ -143,7 +143,29 @@ class RoboTest:
             finally:
                 if inp: inp.close()
                 raise Exception(text)
-        
+
+    def compare_csv(self, file, delta=0.001):
+        self.log('comparing %s %s' % 
+                 (join(LOCAL_RESULT, file), join(LOCAL_TARGET, file)))
+        with open(join(LOCAL_TARGET, file), "r") as target:
+            t = reader(target)
+            with open(join(LOCAL_RESULT, file), "r") as result:
+                r = reader(result)
+                for (trow, rrow) in map(None, t, r):
+                    trow is None: raise Exception("no target for %s", rrow)
+                    rrow is None: raise Exception("no result for %s", trow)
+                    if len(trow) != len(rrow):
+                        raise Exception("result file format changed")
+                    for (tval, rval) in zip(trow, vrow):
+                        if type(tval) != type(rval):
+                            raise Exception("type changed for %s/%s" % (tval, rval))
+                        if tval != rval:
+                            if isinstance(tval, float):
+                                big = max(abs(tval), abs(rval))
+                                if abs(tval - rval) / big < delta:
+                                    continue
+                            raise Exception("%s != %s" % (tval, rval))
+
     def copy_new(self, file):
         self.log('saving %s as new reference' % join(LOCAL_RESULT, file))
         check_call('scp %s %s:%s &> /dev/null' % 
