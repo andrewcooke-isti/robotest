@@ -7,14 +7,24 @@ from os import unlink
 from os.path import exists, join
 from csv import reader, writer
 
-REMOTE_TARGET = '/apps/data/robot/global-target-dir'
-LOCAL_TARGET = '/apps/data/robot/local-target-dir'
-LOCAL_RESULT = '/apps/data/robot/local-result-dir'
-DIFF_OUT = '/apps/data/robot/diff.txt'
+
+REMOTE_TARGET = '/apps/data/robot/global-target-dir'   # master target dir
+LOCAL_TARGET = '/apps/data/robot/local-target-dir'     # local copy of above
+LOCAL_RESULT = '/apps/data/robot/local-result-dir'     # local results
+DIFF_OUT = '/apps/data/robot/diff.txt'                 # temp file
 
 
 class RoboTest:
 
+    """A Robot plugin that provides some basic tests against databases
+       and files.  The main feature is that the expected results are not
+       saved in the test specification, but in separate files on the
+       Jenkins master.  Results are compared against those files.
+
+       If a test fails, and the new values are correct, then deleting
+       the target file on master will mean that the next time the test
+       is run, the results will be taken as future targets.
+    """
 
     def __init__(self, master='dlv020', cnxn='cats_idcx/password@XE', 
                  debug=False):
@@ -31,6 +41,11 @@ class RoboTest:
     # tests -------------------------------------------------------------------
 
     def count_lines(self, table, file):
+        """Count the lines in the given table.
+           Write the result to the given file.
+           Compare the written file with the target (if present)
+           or save as target (if no current target).
+        """
         self.clean(file)
         self.init_file(file)
         self.init_db()
@@ -43,6 +58,11 @@ class RoboTest:
             self.copy_new(file)
 
     def select_fields(self, table, file, *fields):
+        """Select the given column(s) from a table, sorting them.
+           Write the columns to the given file.
+           Compare the written file with the target (if present)
+           or save as target (if no current target).
+        """
         self.clean(file)
         self.init_file(file)
         self.init_db()
@@ -56,7 +76,31 @@ class RoboTest:
         else:
             self.copy_new(file)
 
+    def select_field(self, table, file, field, delta):
+        """Select the given column from a table, sorting the values.
+           Write the column to the given file.
+           Compare the written file with the target (if present)
+           or save as target (if no current target).
+           Comparison of floats uses a configurable relative threshold.
+        """
+        self.clean(file)
+        self.init_file(file)
+        self.init_db()
+        self.record_sql('%s for %s' % (field, table),
+                        'select %s from %s order by %s' % 
+                        (field, table, field))
+        self.close()
+        if self.target_exists(file):
+            self.compare_csv(file, delta)
+        else:
+            self.copy_new(file)
+
     def grep_file(self, infile, file, field):
+        """Extract lines from the file that contain the given text.
+           Write the lines to the given file.
+           Compare the written file with the target (if present)
+           or save as target (if no current target).
+        """
         self.clean(file)
         self.init_file(file)
         inp = open(infile, 'r')
@@ -74,26 +118,32 @@ class RoboTest:
     # support -----------------------------------------------------------------
 
     def log(self, string):
+        """Unfortunately, Robot seems to swallow this."""
         if self.debug: print(string, file=stderr)
 
     def target_exists(self, file):
+        """Does the file exist as a local target?"""
         return exists(join(LOCAL_TARGET, file))
 
     def clean(self, file):
+        """Delete the files used for this test."""
         if exists(join(LOCAL_RESULT, file)): unlink(join(LOCAL_RESULT, file))
         if exists(join(LOCAL_TARGET, file)): unlink(join(LOCAL_TARGET, file))
         if exists(DIFF_OUT): unlink(DIFF_OUT)
 
     def close(self):
+        """Close the resources used in this test."""
         if self.out: self.out.close()
         if self.cur: self.cur.close()
         if self.con: self.con.close()
 
     def init_db(self):
+        """Open a connection to the database."""
         self.con = connect(self.cnxn)
         self.cur = self.con.cursor()
 
     def init_file(self, file):
+        """Copy the target from the master machine."""
         self.log('retrieving %s from %s:%s' % 
                  (file, self.master, join(REMOTE_TARGET, file)))
         try:
@@ -107,6 +157,8 @@ class RoboTest:
         self.out = open(join(LOCAL_RESULT, file), 'w')
         
     def record_sql(self, label, sql):
+        """Execute the given SQL and write the results, with column names,
+           in CSV format."""
         w = writer(self.out)
         w.writerow([label])
         try:
@@ -121,6 +173,7 @@ class RoboTest:
             w.writerow([e])
                 
     def compare_diff(self, file):
+        """Compare target and result files using diff."""
         self.log('comparing %s %s' % 
                  (join(LOCAL_RESULT, file), join(LOCAL_TARGET, file)))
         try:
@@ -145,6 +198,8 @@ class RoboTest:
                 raise Exception(text)
 
     def compare_csv(self, file, delta=0.001):
+        """Compare target and result CSV files, entry by entry, with 
+           floats using a relative threshold."""
         self.log('comparing %s %s' % 
                  (join(LOCAL_RESULT, file), join(LOCAL_TARGET, file)))
         with open(join(LOCAL_TARGET, file), "r") as target:
@@ -171,6 +226,8 @@ class RoboTest:
                             raise Exception("%s != %s" % (tval, rval))
 
     def copy_new(self, file):
+        """Copy results to target on the master machine (for future use
+           as target)."""
         self.log('saving %s as new reference' % join(LOCAL_RESULT, file))
         check_call('scp %s %s:%s &> /dev/null' % 
                    (join(LOCAL_RESULT, file), self.master, 
