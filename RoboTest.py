@@ -91,7 +91,7 @@ class RoboTest:
                         (field, table, field))
         self.close()
         if self.target_exists(file):
-            self.compare_csv(file, delta)
+            self.compare_csv(file, float(delta))
         else:
             self.copy_new(file)
 
