@@ -207,8 +207,8 @@ class RoboTest:
             with open(join(LOCAL_RESULT, file), "r") as result:
                 r = reader(result)
                 for (trow, rrow) in map(None, t, r):
-                    if trow is None: raise Exception("no target for %s", rrow)
-                    if rrow is None: raise Exception("no result for %s", trow)
+                    if trow is None: raise Exception("no target for %s" % rrow)
+                    if rrow is None: raise Exception("no result for %s" % trow)
                     if len(trow) != len(rrow):
                         raise Exception("result file format changed")
                     for (tval, rval) in zip(trow, rrow):
