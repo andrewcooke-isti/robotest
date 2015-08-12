@@ -53,7 +53,7 @@ class RoboTest:
                         'select count(*) from %s' % table)
         self.close()
         if self.target_exists(file):
-            self.compare_csv(file)
+            self.compare_csv(file, result_name=table)
         else:
             self.copy_new(file)
 
@@ -72,7 +72,7 @@ class RoboTest:
                         (field_names, table, field_names))
         self.close()
         if self.target_exists(file):
-            self.compare_csv(file)
+            self.compare_csv(file, result_name=table)
         else:
             self.copy_new(file)
 
@@ -91,7 +91,7 @@ class RoboTest:
                         (field, table, field))
         self.close()
         if self.target_exists(file):
-            self.compare_csv(file, float(delta))
+            self.compare_csv(file, delta=float(delta), result_name=table)
         else:
             self.copy_new(file)
 
@@ -197,20 +197,26 @@ class RoboTest:
                 if inp: inp.close()
                 raise Exception(text)
 
-    def compare_csv(self, file, delta=0.001):
+    def compare_csv(self, file, delta=0.001, result_name=None):
         """Compare target and result CSV files, entry by entry, with 
            floats using a relative threshold."""
-        self.log('comparing %s %s' % 
-                 (join(LOCAL_RESULT, file), join(LOCAL_TARGET, file)))
+        if result_name is None: result_name = join(LOCAL_RESULT, file)
+        target_name = join(LOCAL_TARGET, file)
+        self.log('comparing %s %s' % (result_name, target_name))
         with open(join(LOCAL_TARGET, file), "r") as target:
             t = reader(target)
             with open(join(LOCAL_RESULT, file), "r") as result:
                 r = reader(result)
                 for (trow, rrow) in map(None, t, r):
-                    if trow is None: raise Exception("no target for %s" % rrow)
-                    if rrow is None: raise Exception("no result for %s" % trow)
+                    if trow is None: 
+                        raise Exception("No target in %s matching %s in %s" % 
+                                        (target_name, rrow, result_name))
+                    if rrow is None: 
+                        raise Exception("No result in %s matching %s in %s" % 
+                                        (result_name, trow, target_name))
                     if len(trow) != len(rrow):
-                        raise Exception("result file format changed")
+                        raise Exception("Row length changed in %s or %s" % 
+                                        (target_name, result_name))
                     for (tval, rval) in zip(trow, rrow):
                         if tval != rval:
                             try:
