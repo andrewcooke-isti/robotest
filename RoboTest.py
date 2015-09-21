@@ -57,27 +57,8 @@ class RoboTest:
         else:
             self.copy_new(file)
 
-    def select_fields(self, table, file, *fields):
-        """Select the given column(s) from a table, sorting them.
-           Write the columns to the given file.
-           Compare the written file with the target (if present)
-           or save as target (if no current target).
-        """
-        self.clean(file)
-        self.init_file(file)
-        self.init_db()
-        field_names = ','.join(fields)
-        self.record_sql('%s for %s' % (field_names, table),
-                        'select %s from %s order by %s' % 
-                        (field_names, table, field_names))
-        self.close()
-        if self.target_exists(file):
-            self.compare_csv(file, result_name=table)
-        else:
-            self.copy_new(file)
-
-    def select_field(self, table, file, field, delta):
-        """Select the given column from a table, sorting the values.
+    def select_fields(self, table, file, field, orderby, delta=0):
+        """Select the given column(s) from a table, sorting thems.
            Write the column to the given file.
            Compare the written file with the target (if present)
            or save as target (if no current target).
@@ -86,16 +67,16 @@ class RoboTest:
         self.clean(file)
         self.init_file(file)
         self.init_db()
-        self.record_sql('%s for %s' % (field, table),
+        self.record_sql('%s for %s ordered by %s' % (field, table, orderby),
                         'select %s from %s order by %s' % 
-                        (field, table, field))
+                        (field, table, orderby))
         self.close()
         if self.target_exists(file):
             self.compare_csv(file, delta=float(delta), result_name=table)
         else:
             self.copy_new(file)
 
-    def grep_file(self, infile, file, field):
+    def grep_file_and_compare(self, infile, file, field):
         """Extract lines from the file that contain the given text.
            Write the lines to the given file.
            Compare the written file with the target (if present)
@@ -197,7 +178,7 @@ class RoboTest:
                 if inp: inp.close()
                 raise Exception(text)
 
-    def compare_csv(self, file, delta=0.001, result_name=None):
+    def compare_csv(self, file, delta=0.0, result_name=None):
         """Compare target and result CSV files, entry by entry, with 
            floats using a relative threshold."""
         if result_name is None: result_name = join(LOCAL_RESULT, file)
