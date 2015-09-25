@@ -84,7 +84,7 @@ class RoboTest:
         """
         self.clean(file)
         self.init_file(file)
-        inp = open(infile, 'r')
+        inp = open(infile, 'rb')
         for line in inp:
             if field.lower() in line.lower():
                 print(line.strip(), file=self.out)
