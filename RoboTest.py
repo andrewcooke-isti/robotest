@@ -2,16 +2,16 @@
 from __future__ import print_function
 from cx_Oracle import connect
 from subprocess import call, check_call
-from sys import argv, stderr
-from os import unlink
+from sys import argv, stderr, __stderr__
+from os import unlink, environ
 from os.path import exists, join
 from csv import reader, writer
 
 
-REMOTE_TARGET = '/apps/data/robot/global-target-dir'   # master target dir
-LOCAL_TARGET = '/apps/data/robot/local-target-dir'     # local copy of above
-LOCAL_RESULT = '/apps/data/robot/local-result-dir'     # local results
-DIFF_OUT = '/apps/data/robot/diff.txt'                 # temp file
+REMOTE_TARGET = environ['CATS_DATA_ROBOT'] + '/global-target-dir'   # master target dir
+LOCAL_TARGET = environ['CATS_DATA_ROBOT'] + '/local-target-dir'     # local copy of above
+LOCAL_RESULT = environ['CATS_DATA_ROBOT'] + '/local-result-dir'     # local results
+DIFF_OUT = environ['CATS_DATA_ROBOT'] + '/diff.txt'                 # temp file
 
 
 class RoboTest:
@@ -26,6 +26,8 @@ class RoboTest:
        is run, the results will be taken as future targets.
     """
 
+    ROBOT_LIBRARY_SCOPE = "GLOBAL"
+
     def __init__(self, master='dlv020', cnxn='cats_idcx/password@XE', 
                  debug=False):
         self.master = master
@@ -36,6 +38,7 @@ class RoboTest:
         self.cur = None
         # output stream - cleaned up in self.close()
         self.out = None
+        self.init_files()
 
 
     # tests -------------------------------------------------------------------
@@ -58,7 +61,7 @@ class RoboTest:
             self.copy_new(file)
 
     def select_fields(self, table, file, field, orderby, delta=0):
-        """Select the given column(s) from a table, sorting thems.
+        """Select the given column(s) from a table, sorting them.
            Write the column to the given file.
            Compare the written file with the target (if present)
            or save as target (if no current target).
@@ -98,9 +101,19 @@ class RoboTest:
 
     # support -----------------------------------------------------------------
 
+    def init_files(self):
+        """Copy across all files at start of test."""
+        self.log('synching files from %s on %s to %s' %
+                 (REMOTE_TARGET, self.master, LOCAL_TARGET))
+        check_call('rsync -r %s:%s/ %s/ &> /dev/null' % 
+                   (self.master, REMOTE_TARGET, LOCAL_TARGET),
+                   shell=True)
+
     def log(self, string):
         """Unfortunately, Robot seems to swallow this."""
         if self.debug: print(string, file=stderr)
+        # visible, but a mess, if we force stderr
+#        if self.debug: print(string, file=__stderr__)
 
     def target_exists(self, file):
         """Does the file exist as a local target?"""
@@ -109,7 +122,6 @@ class RoboTest:
     def clean(self, file):
         """Delete the files used for this test."""
         if exists(join(LOCAL_RESULT, file)): unlink(join(LOCAL_RESULT, file))
-        if exists(join(LOCAL_TARGET, file)): unlink(join(LOCAL_TARGET, file))
         if exists(DIFF_OUT): unlink(DIFF_OUT)
 
     def close(self):
@@ -124,17 +136,7 @@ class RoboTest:
         self.cur = self.con.cursor()
 
     def init_file(self, file):
-        """Copy the target from the master machine."""
-        self.log('retrieving %s from %s:%s' % 
-                 (file, self.master, join(REMOTE_TARGET, file)))
-        try:
-            check_call('scp %s:%s %s &> /dev/null' % 
-                       (self.master, join(REMOTE_TARGET, file), 
-                        join(LOCAL_TARGET, file)),
-                       shell=True)
-        except:
-            self.log('could not copy %s:%s - assuming starting from zero' %
-                     (self.master, join(REMOTE_TARGET, file)))
+        """Prepare output (used to also copy files, now done via rsync)."""
         self.out = open(join(LOCAL_RESULT, file), 'w')
         
     def record_sql(self, label, sql):
