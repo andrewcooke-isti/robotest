@@ -6,6 +6,7 @@ from sys import argv, stderr, __stderr__
 from os import unlink, environ
 from os.path import exists, join
 from csv import reader, writer
+from re import split
 
 
 REMOTE_TARGET = environ['CATS_DATA_ROBOT'] + '/global-target-dir'   # master target dir
@@ -13,7 +14,6 @@ LOCAL_TARGET = environ['CATS_DATA_ROBOT'] + '/local-target-dir'     # local copy
 LOCAL_RESULT = environ['CATS_DATA_ROBOT'] + '/local-result-dir'     # local results
 DIFF_OUT = environ['CATS_DATA_ROBOT'] + '/diff.txt'                 # temp file
 
-ROW = 'row'   # index for each row in table
 
 class RoboTest:
 
@@ -56,8 +56,8 @@ class RoboTest:
         try:
             data = self.read_cache(table)
             self.record_sql('line count for %s' % table,
-                            {'COUNT(*)': [len(data[ROW])]},
-                            'COUNT(*)', 'COUNT(*)')
+                            {'COUNT(*)': [len(data[data.keys()[0]])]},
+                            ['COUNT(*)'], [])
         finally:
             self.close()
         if self.target_exists(file):
@@ -65,19 +65,21 @@ class RoboTest:
         else:
             self.copy_new(file)
 
-    def select_fields(self, table, file, field, orderby, delta=0):
+    def select_fields(self, table, file, fields, orderby, delta=0):
         """Select the given column(s) from a table, sorting them.
            Write the column to the given file.
            Compare the written file with the target (if present)
            or save as target (if no current target).
            Comparison of floats uses a configurable relative threshold.
         """
+        cols = map(lambda x: x.upper(), split(r'[, ]+', fields))
+        ocols = map(lambda x: x.upper(), split(r'[, ]+', orderby))
         self.clean(file)
         self.init_file(file)
         try:
             self.record_sql('%s for %s ordered by %s' % 
-                            (field, table, orderby),
-                            self.read_cache(table), field, orderby)
+                            (fields, table, orderby),
+                            self.read_cache(table), cols, ocols)
         finally:
             self.close()
         if self.target_exists(file):
@@ -123,9 +125,7 @@ class RoboTest:
             cols = [d[0] for d in self.cur.description]
             for col in cols:
                 self.cache[table][col] = []
-            self.cache[table][ROW] = []
-            for j, row in enumerate(self.cur, start=1):
-                self.cache[table][ROW].append(j)
+            for row in self.cur:
                 for i, col in enumerate(cols):
                     self.cache[table][col].append(row[i])
         return self.cache[table]
@@ -158,15 +158,20 @@ class RoboTest:
         """Prepare output (used to also copy files, now done via rsync)."""
         self.out = open(join(LOCAL_RESULT, file), 'w')
         
-    def record_sql(self, label, data, col, orderby):
+    def record_sql(self, label, data, cols, ocols):
         """Write the data to the file.  The format duplicates how
            SQL was written directly, before we used a cache."""
         w = writer(self.out)
         w.writerow([label])
-        subset = [x for (y, x) in 
-                  sorted(zip(data[col.upper()], data[orderby.upper()]))]
-        for (j, val) in enumerate(subset, start=1):
-            w.writerow([j, col, val])
+        toorder = []
+        for ocol in ocols: toorder.append(data[ocol])
+        for col in cols: toorder.append(data[col])
+        ordered = map(lambda x: x[len(ocols):], sorted(zip(*toorder)))
+        for (j, vals) in enumerate(ordered, start=1):
+            row = [j]
+            for (col, val) in zip(cols, vals):
+                row.extend([col, val])
+            w.writerow(row)
                 
     def compare_diff(self, file):
         """Compare target and result files using diff."""
