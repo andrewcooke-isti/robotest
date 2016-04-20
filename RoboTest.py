@@ -230,7 +230,8 @@ class RoboTest:
                                     continue
                             except:
                                 pass
-                            raise Exception("%s != %s" % (tval, rval))
+                            raise Exception("(target) %s != %s (result)" % 
+                                            (tval, rval))
 
     def copy_new(self, file):
         """Copy results to target on the master machine (for future use
