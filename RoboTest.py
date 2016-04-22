@@ -30,10 +30,11 @@ class RoboTest:
     ROBOT_LIBRARY_SCOPE = "GLOBAL"
 
     def __init__(self, master='dlv020', cnxn='cats_idcx/password@XE', 
-                 debug=False):
+                 debug=False, context="No context"):
         self.master = master
         self.cnxn = cnxn
         self.debug = debug
+        self.context = context
         # database state - cleaned up in self.close()
         self.con = None
         self.cur = None
@@ -185,7 +186,7 @@ class RoboTest:
             print("Test passed", file=stderr)
         except:
             print("Test failed", file=stderr)
-            text = 'Could not read %s' % DIFF_OUT
+            text = '%s: Could not read %s' % (self.context, DIFF_OUT)
             inp = None
             try:
                 inp = open(DIFF_OUT, 'r')
@@ -194,6 +195,7 @@ class RoboTest:
                     text = ''.join(lines[:4]) + "..."
                 else:
                     text = ''.join(lines)
+                text = self.context + ':\n' + text
             finally:
                 if inp: inp.close()
                 raise Exception(text)
@@ -210,14 +212,14 @@ class RoboTest:
                 r = reader(result)
                 for (trow, rrow) in map(None, t, r):
                     if trow is None: 
-                        raise Exception("No target in %s matching %s in %s" % 
-                                        (target_name, rrow, result_name))
+                        raise Exception("%s: No target in %s matching %s in %s" % 
+                                        (self.context, target_name, rrow, result_name))
                     if rrow is None: 
-                        raise Exception("No result in %s matching %s in %s" % 
-                                        (result_name, trow, target_name))
+                        raise Exception("%s: No result in %s matching %s in %s" % 
+                                        (self.context, result_name, trow, target_name))
                     if len(trow) != len(rrow):
-                        raise Exception("Row length changed in %s or %s" % 
-                                        (target_name, result_name))
+                        raise Exception("%s: Row length changed in %s or %s" % 
+                                        (self.context, target_name, result_name))
                     for (tval, rval) in zip(trow, rrow):
                         if tval != rval:
                             try:
@@ -230,8 +232,8 @@ class RoboTest:
                                     continue
                             except:
                                 pass
-                            raise Exception("(target) %s != %s (result in %s)" % 
-                                            (tval, rval, result_name))
+                            raise Exception("%s: (target) %s != %s (result in %s)" % 
+                                            (self.context, tval, rval, result_name))
 
     def copy_new(self, file):
         """Copy results to target on the master machine (for future use
