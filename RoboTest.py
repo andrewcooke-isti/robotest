@@ -30,7 +30,7 @@ class RoboTest:
     ROBOT_LIBRARY_SCOPE = "GLOBAL"
 
     def __init__(self, master='dlv020', cnxn='cats_idcx/password@XE', 
-                 debug=False, context="No context"):
+                 context="No context", debug=False):
         self.master = master
         self.cnxn = cnxn
         self.debug = debug
