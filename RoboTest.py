@@ -7,12 +7,20 @@ from os import unlink, environ
 from os.path import exists, join
 from csv import reader, writer
 from re import split
+from robot.api import logger
+from robot.libraries.BuiltIn import BuiltIn
 
 
 REMOTE_TARGET = environ['CATS_DATA_ROBOT'] + '/global-target-dir'   # master target dir
 LOCAL_TARGET = environ['CATS_DATA_ROBOT'] + '/local-target-dir'     # local copy of above
 LOCAL_RESULT = environ['CATS_DATA_ROBOT'] + '/local-result-dir'     # local results
 DIFF_OUT = environ['CATS_DATA_ROBOT'] + '/diff.txt'                 # temp file
+
+
+class SkippedException(Exception):
+
+    def __repr__(self):
+        return 'SKIPPED'
 
 
 class RoboTest:
@@ -31,137 +39,167 @@ class RoboTest:
 
     def __init__(self, master='dlv020', cnxn='cats_idcx/password@XE', 
                  debug=False):
-        self.master = master
-        self.cnxn = cnxn
-        self.debug = debug
-        # database state - cleaned up in self.close()
-        self.con = None
-        self.cur = None
-        # output stream - cleaned up in self.close()
-        self.out = None
-        self.cache = {}
-        self.init_files()
-        self.init_db()
+        self._master = master
+        self._cnxn = cnxn
+        self._debug = debug
+        self._con = None # database state - cleaned up in self.close()
+        self._cur = None # database state - cleaned up in self.close()
+        self._out = None # output stream - cleaned up in self.close()
+        self._previous = {}  # True for success, False for failure
+        self._cache = {}
+        self._init_files()
+        self._init_db()
 
     # tests -------------------------------------------------------------------
 
-    def count_lines(self, table, file):
+    def count_lines(self, table, file, depends_on=None):
         """Count the lines in the given table.
            Write the result to the given file.
            Compare the written file with the target (if present)
            or save as target (if no current target).
         """
-        self.clean(file)
-        self.init_file(file)
+        self._skip(depends_on)
         try:
-            data = self.read_cache(table)
-            self.record_sql('line count for %s' % table,
-                            {'COUNT(*)': [len(data[data.keys()[0]])]},
-                            ['COUNT(*)'], [])
-        finally:
-            self.close()
-        if self.target_exists(file):
-            self.compare_csv(file, result_name=table)
-        else:
-            self.copy_new(file)
+            self._clean(file)
+            self._init_file(file)
+            try:
+                data = self._read_cache(table)
+                self._record_sql('line count for %s' % table,
+                                 {'COUNT(*)': [len(data[data.keys()[0]])]},
+                                 ['COUNT(*)'], [])
+            finally:
+                self._close()
+            if self._target_exists(file):
+                self._compare_csv(file, result_name=table)
+            else:
+                self._copy_new(file)
+        except Exception as e:
+            self._record_failure(e)
 
-    def select_fields(self, table, file, fields, orderby, delta=0):
+    def select_fields(self, table, file, fields, orderby, depends_on=None, delta=0):
         """Select the given column(s) from a table, sorting them.
            Write the column to the given file.
            Compare the written file with the target (if present)
            or save as target (if no current target).
            Comparison of floats uses a configurable relative threshold.
         """
-        cols = map(lambda x: x.upper(), split(r'[, ]+', fields))
-        ocols = map(lambda x: x.upper(), split(r'[, ]+', orderby))
-        self.clean(file)
-        self.init_file(file)
+        self._skip(depends_on)
         try:
-            self.record_sql('%s for %s ordered by %s' % 
-                            (fields, table, orderby),
-                            self.read_cache(table), cols, ocols)
-        finally:
-            self.close()
-        if self.target_exists(file):
-            self.compare_csv(file, delta=float(delta), result_name=table)
-        else:
-            self.copy_new(file)
+            cols = map(lambda x: x.upper(), split(r'[, ]+', fields))
+            ocols = map(lambda x: x.upper(), split(r'[, ]+', orderby))
+            self._clean(file)
+            self._init_file(file)
+            try:
+                self._record_sql('%s for %s ordered by %s' % 
+                                 (fields, table, orderby),
+                                 self._read_cache(table), cols, ocols)
+            finally:
+                self._close()
+            if self._target_exists(file):
+                self._compare_csv(file, delta=float(delta), result_name=table)
+            else:
+                self._copy_new(file)
+        except Exception as e:
+            self._record_failure(e)
 
-    def grep_file_and_compare(self, infile, file, field):
+    def grep_file_and_compare(self, infile, file, field, depends_on=None):
         """Extract lines from the file that contain the given text.
            Write the lines to the given file.
            Compare the written file with the target (if present)
            or save as target (if no current target).
         """
-        self.clean(file)
-        self.init_file(file)
-        inp = open(infile, 'rb')
-        for line in inp:
-            if field.lower() in line.lower():
-                print(line.strip(), file=self.out)
-        inp.close()
-        self.close()
-        if self.target_exists(file):
-            self.compare_diff(file)
-        else:
-            self.copy_new(file)
-
+        self._skip(depends_on)
+        try:
+            self._clean(file)
+            self._init_file(file)
+            inp = open(infile, 'rb')
+            for line in inp:
+                if field.lower() in line.lower():
+                    print(line.strip(), file=self._out)
+            inp.close()
+            self._close()
+            if self._target_exists(file):
+                self._compare_diff(file)
+            else:
+                self._copy_new(file)
+        except Exception as e:
+            self._record_failure(e)
 
     # support -----------------------------------------------------------------
 
-    def init_files(self):
+    def _test_name(self):
+        return BuiltIn().replace_variables('${TEST_NAME}')
+
+    def _skip(self, depends_on):
+        """Throw SkippedException if depends_on failed."""
+        name = self._test_name()
+        if name in self._previous:
+            raise Exception('Repeated test name: %s' % name)
+        self._previous[name] = True  # assume this test will succeed
+        if depends_on:
+            if depends_on not in self._previous:
+                raise Exception('Bad dependency %s in %s' %
+                                (depends_on, name))
+            if not self._previous[depends_on]:
+                raise SkippedException()
+
+    def _record_failure(self, e):
+        """Record failure and re-throw exception."""
+        name = self._test_name()
+        self._previous[name] = False  # this test failed
+        raise e
+
+    def _init_files(self):
         """Copy across all files at start of test."""
-        self.log('synching files from %s on %s to %s' %
-                 (REMOTE_TARGET, self.master, LOCAL_TARGET))
+        self._log('synching files from %s on %s to %s' %
+                  (REMOTE_TARGET, self.master, LOCAL_TARGET))
         check_call('rsync -r %s:%s/ %s/ &> /dev/null' % 
-                   (self.master, REMOTE_TARGET, LOCAL_TARGET),
+                   (self._master, REMOTE_TARGET, LOCAL_TARGET),
                    shell=True)
 
-    def read_cache(self, table):
+    def _read_cache(self, table):
         """Read table into cache."""
-        if table not in self.cache:
-            self.cache[table] = {}
-            self.cur.execute('select * from %s' % table)
-            cols = [d[0] for d in self.cur.description]
+        if table not in self._cache:
+            self._cache[table] = {}
+            self._cur.execute('select * from %s' % table)
+            cols = [d[0] for d in self._cur.description]
             for col in cols:
-                self.cache[table][col] = []
-            for row in self.cur:
+                self._cache[table][col] = []
+            for row in self._cur:
                 for i, col in enumerate(cols):
-                    self.cache[table][col].append(row[i])
-        return self.cache[table]
+                    self._cache[table][col].append(row[i])
+        return self._cache[table]
 
-    def log(self, string):
-        """Unfortunately, Robot seems to swallow this."""
-        if self.debug: print(string, file=stderr)
-        # visible, but a mess, if we force stderr
-#        if self.debug: print(string, file=__stderr__)
+    def _log(self, string):
+        """Log as info to reobot."""
+        if self._debug: logger.info(string)
 
-    def target_exists(self, file):
+    def _target_exists(self, file):
         """Does the file exist as a local target?"""
         return exists(join(LOCAL_TARGET, file))
 
-    def clean(self, file):
+    def _clean(self, file):
         """Delete the files used for this test."""
         if exists(join(LOCAL_RESULT, file)): unlink(join(LOCAL_RESULT, file))
         if exists(DIFF_OUT): unlink(DIFF_OUT)
 
-    def close(self):
+    def _close(self):
         """Close the resources used in this test."""
-        if self.out: self.out.close()
+        if self._out: self._out.close()
 
-    def init_db(self):
+    def _init_db(self):
         """Open a connection to the database."""
-        self.con = connect(self.cnxn)
-        self.cur = self.con.cursor()
+        self._con = connect(self._cnxn)
+        self._cur = self._con.cursor()
 
-    def init_file(self, file):
+    def _init_file(self, file):
         """Prepare output (used to also copy files, now done via rsync)."""
-        self.out = open(join(LOCAL_RESULT, file), 'w')
+        self._out = open(join(LOCAL_RESULT, file), 'w')
         
-    def record_sql(self, label, data, cols, ocols):
+    def _record_sql(self, label, data, cols, ocols):
         """Write the data to the file.  The format duplicates how
            SQL was written directly, before we used a cache."""
-        w = writer(self.out)
+        w = writer(self._out)
         w.writerow([label])
         toorder = []
         for ocol in ocols: toorder.append(data[ocol])
@@ -173,10 +211,10 @@ class RoboTest:
                 row.extend([col, val])
             w.writerow(row)
                 
-    def compare_diff(self, file):
+    def _compare_diff(self, file):
         """Compare target and result files using diff."""
-        self.log('comparing %s %s' % 
-                 (join(LOCAL_RESULT, file), join(LOCAL_TARGET, file)))
+        self._log('comparing %s %s' % 
+                  (join(LOCAL_RESULT, file), join(LOCAL_TARGET, file)))
         try:
             check_call('diff -y --suppress-common-lines %s %s > %s' % 
                        (join(LOCAL_TARGET, file), 
@@ -198,12 +236,12 @@ class RoboTest:
                 if inp: inp.close()
                 raise Exception(text)
 
-    def compare_csv(self, file, delta=0.0, result_name=None):
+    def _compare_csv(self, file, delta=0.0, result_name=None):
         """Compare target and result CSV files, entry by entry, with 
            floats using a relative threshold."""
         if result_name is None: result_name = join(LOCAL_RESULT, file)
         target_name = join(LOCAL_TARGET, file)
-        self.log('comparing %s %s' % (result_name, target_name))
+        self._log('comparing %s %s' % (result_name, target_name))
         with open(join(LOCAL_TARGET, file), "r") as target:
             t = reader(target)
             with open(join(LOCAL_RESULT, file), "r") as result:
@@ -233,12 +271,12 @@ class RoboTest:
                             raise Exception("(target) %s != %s (result in %s)" % 
                                             (tval, rval, result_name))
 
-    def copy_new(self, file):
+    def _copy_new(self, file):
         """Copy results to target on the master machine (for future use
            as target)."""
-        self.log('saving %s as new reference' % join(LOCAL_RESULT, file))
+        self._log('saving %s as new reference' % join(LOCAL_RESULT, file))
         check_call('scp %s %s:%s &> /dev/null' % 
-                   (join(LOCAL_RESULT, file), self.master, 
+                   (join(LOCAL_RESULT, file), self._master, 
                     join(REMOTE_TARGET, file)), 
                    shell=True)
 
