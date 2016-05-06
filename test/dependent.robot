@@ -8,3 +8,7 @@
 | Third test  | Grep file and compare | /etc/passwd | passwd2 | bin     | Missing      |
 | First test  | Grep file and compare | /etc/passwd | passwd2 | bin     |              |
 | Fourth test | Grep file and compare | /etc/passwd | passwd2 | bin     |              |
+
+| *Test case* | *Action*              | *Infile*    | *File*  | *Field* |
+| Fifth test  | Grep file and compare | /etc/passwd | passwd1 | root    |
+
