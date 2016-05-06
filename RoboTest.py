@@ -39,9 +39,9 @@ class RoboTest:
 
     def __init__(self, master='dlv020', cnxn='cats_idcx/password@XE', 
                  debug=False):
-        self._master = master
-        self._cnxn = cnxn
-        self._debug = debug
+        self.master = master
+        self.cnxn = cnxn
+        self.debug = debug
         self._con = None # database state - cleaned up in self.close()
         self._cur = None # database state - cleaned up in self.close()
         self._out = None # output stream - cleaned up in self.close()
@@ -154,7 +154,7 @@ class RoboTest:
         self._log('synching files from %s on %s to %s' %
                   (REMOTE_TARGET, self.master, LOCAL_TARGET))
         check_call('rsync -r %s:%s/ %s/ &> /dev/null' % 
-                   (self._master, REMOTE_TARGET, LOCAL_TARGET),
+                   (self.master, REMOTE_TARGET, LOCAL_TARGET),
                    shell=True)
 
     def _read_cache(self, table):
@@ -172,7 +172,7 @@ class RoboTest:
 
     def _log(self, string):
         """Log as info to reobot."""
-        if self._debug: logger.info(string)
+        if self.debug: logger.info(string)
 
     def _target_exists(self, file):
         """Does the file exist as a local target?"""
@@ -189,7 +189,7 @@ class RoboTest:
 
     def _init_db(self):
         """Open a connection to the database."""
-        self._con = connect(self._cnxn)
+        self._con = connect(self.cnxn)
         self._cur = self._con.cursor()
 
     def _init_file(self, file):
@@ -276,7 +276,7 @@ class RoboTest:
            as target)."""
         self._log('saving %s as new reference' % join(LOCAL_RESULT, file))
         check_call('scp %s %s:%s &> /dev/null' % 
-                   (join(LOCAL_RESULT, file), self._master, 
+                   (join(LOCAL_RESULT, file), self.master, 
                     join(REMOTE_TARGET, file)), 
                    shell=True)
 
