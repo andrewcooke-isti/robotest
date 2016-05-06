@@ -1,8 +1,9 @@
 #!/bin/bash
 
 # run this by hand on the slave.  first run will create test targets
-# on master.  if you then edit passwd1 on master all tests should fail
-# for different reasons (including second skipped).
+# on master.  if you then edit passwd1 on master all tests (except
+# fourth) should fail for different reasons (including second
+# skipped).
 
 . /home/cats/.catsrc
 # dump env
