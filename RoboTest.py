@@ -76,7 +76,7 @@ class RoboTest:
         except Exception as e:
             self._record_failure(e)
 
-    def select_fields(self, table, file, fields, orderby, depends_on=None, delta=0):
+    def select_fields(self, table, file, fields, orderby, delta=0, depends_on=None):
         """Select the given column(s) from a table, sorting them.
            Write the column to the given file.
            Compare the written file with the target (if present)
