@@ -84,6 +84,7 @@ class RoboTest:
            Comparison of floats uses a configurable relative threshold.
         """
         self._skip(depends_on)
+        if not delta: delta=0
         try:
             cols = map(lambda x: x.upper(), split(r'[, ]+', fields))
             ocols = map(lambda x: x.upper(), split(r'[, ]+', orderby))
