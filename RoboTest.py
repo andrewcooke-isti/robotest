@@ -11,10 +11,9 @@ from robot.api import logger
 from robot.libraries.BuiltIn import BuiltIn
 
 
-REMOTE_TARGET = environ['CATS_DATA_ROBOT'] + '/global-target-dir'   # master target dir
-LOCAL_TARGET = environ['CATS_DATA_ROBOT'] + '/local-target-dir'     # local copy of above
-LOCAL_RESULT = environ['CATS_DATA_ROBOT'] + '/local-result-dir'     # local results
-DIFF_OUT = environ['CATS_DATA_ROBOT'] + '/diff.txt'                 # temp file
+TARGETS = environ['CATS_DATA_ROBOT_TARGETS']  # target files directory
+RESULTS = environ['CATS_DATA_ROBOT_RESULTS']  # result files directory
+DIFF_OUT = environ['CATS_DATA_ROBOT_RESULTS'] + '/diff.txt'  # temp file
 
 
 class SkippedException(Exception):
@@ -27,19 +26,18 @@ class RoboTest:
 
     """A Robot plugin that provides some basic tests against databases
        and files.  The main feature is that the expected results are not
-       saved in the test specification, but in separate files on the
-       Jenkins master.  Results are compared against those files.
+       saved in the test specification, but in separate files in a target
+       files directory.  Result files are compared against those target
+       files.
 
        If a test fails, and the new values are correct, then deleting
-       the target file on master will mean that the next time the test
-       is run, the results will be taken as future targets.
+       the target file will mean that the next time the test is run, the
+       results will be taken as future targets.
     """
 
     ROBOT_LIBRARY_SCOPE = "GLOBAL"
 
-    def __init__(self, master='dlv020', cnxn='cats_idcx/password@XE', 
-                 debug=False):
-        self.master = master
+    def __init__(self, cnxn='cats_idcx/password@XE', debug=False):
         self.cnxn = cnxn
         self.debug = debug
         self._con = None # database state - cleaned up in self.close()
@@ -47,7 +45,6 @@ class RoboTest:
         self._out = None # output stream - cleaned up in self.close()
         self._previous = {}  # True for success, False for failure
         self._cache = {}
-        self._init_files()
         self._init_db()
 
     # tests -------------------------------------------------------------------
@@ -84,7 +81,8 @@ class RoboTest:
            Comparison of floats uses a configurable relative threshold.
         """
         self._skip(depends_on)
-        if not delta: delta=0
+        if delta == "":
+            delta = 0
         try:
             cols = map(lambda x: x.upper(), split(r'[, ]+', fields))
             ocols = map(lambda x: x.upper(), split(r'[, ]+', orderby))
@@ -150,14 +148,6 @@ class RoboTest:
         self._previous[name] = False  # this test failed
         raise e
 
-    def _init_files(self):
-        """Copy across all files at start of test."""
-        self._log('synching files from %s on %s to %s' %
-                  (REMOTE_TARGET, self.master, LOCAL_TARGET))
-        check_call('rsync -r %s:%s/ %s/ &> /dev/null' % 
-                   (self.master, REMOTE_TARGET, LOCAL_TARGET),
-                   shell=True)
-
     def _read_cache(self, table):
         """Read table into cache."""
         if table not in self._cache:
@@ -176,12 +166,12 @@ class RoboTest:
         if self.debug: logger.info(string)
 
     def _target_exists(self, file):
-        """Does the file exist as a local target?"""
-        return exists(join(LOCAL_TARGET, file))
+        """Does the file exist as a target?"""
+        return exists(join(TARGETS, file))
 
     def _clean(self, file):
         """Delete the files used for this test."""
-        if exists(join(LOCAL_RESULT, file)): unlink(join(LOCAL_RESULT, file))
+        if exists(join(RESULTS, file)): unlink(join(RESULTS, file))
         if exists(DIFF_OUT): unlink(DIFF_OUT)
 
     def _close(self):
@@ -194,8 +184,8 @@ class RoboTest:
         self._cur = self._con.cursor()
 
     def _init_file(self, file):
-        """Prepare output (used to also copy files, now done via rsync)."""
-        self._out = open(join(LOCAL_RESULT, file), 'w')
+        """Prepare output."""
+        self._out = open(join(RESULTS, file), 'w')
         
     def _record_sql(self, label, data, cols, ocols):
         """Write the data to the file.  The format duplicates how
@@ -215,11 +205,11 @@ class RoboTest:
     def _compare_diff(self, file):
         """Compare target and result files using diff."""
         self._log('comparing %s %s' % 
-                  (join(LOCAL_RESULT, file), join(LOCAL_TARGET, file)))
+                  (join(RESULTS, file), join(TARGETS, file)))
         try:
             check_call('diff -y --suppress-common-lines %s %s > %s' % 
-                       (join(LOCAL_TARGET, file), 
-                        join(LOCAL_RESULT, file), 
+                       (join(TARGETS, file), 
+                        join(RESULTS, file), 
                         DIFF_OUT), shell=True)
             print("Test passed", file=stderr)
         except:
@@ -240,12 +230,12 @@ class RoboTest:
     def _compare_csv(self, file, delta=0.0, result_name=None):
         """Compare target and result CSV files, entry by entry, with 
            floats using a relative threshold."""
-        if result_name is None: result_name = join(LOCAL_RESULT, file)
-        target_name = join(LOCAL_TARGET, file)
+        if result_name is None: result_name = join(RESULTS, file)
+        target_name = join(TARGETS, file)
         self._log('comparing %s %s' % (result_name, target_name))
-        with open(join(LOCAL_TARGET, file), "r") as target:
+        with open(join(TARGETS, file), "r") as target:
             t = reader(target)
-            with open(join(LOCAL_RESULT, file), "r") as result:
+            with open(join(RESULTS, file), "r") as result:
                 r = reader(result)
                 for (trow, rrow) in map(None, t, r):
                     if trow is None: 
@@ -273,19 +263,16 @@ class RoboTest:
                                             (tval, rval, result_name))
 
     def _copy_new(self, file):
-        """Copy results to target on the master machine (for future use
-           as target)."""
-        self._log('saving %s as new reference' % join(LOCAL_RESULT, file))
-        check_call('scp %s %s:%s &> /dev/null' % 
-                   (join(LOCAL_RESULT, file), self.master, 
-                    join(REMOTE_TARGET, file)), 
+        """Copy results to target (for future use as target)."""
+        self._log('saving %s as new reference' % join(RESULTS, file))
+        check_call('cp -p %s %s &> /dev/null' % 
+                   (join(RESULTS, file), join(TARGETS, file)), 
                    shell=True)
 
 
 
 if __name__ == '__main__':
     kargs = {}
-    if len(argv) > 1: kargs['master'] = argv[1]
     if len(argv) > 2: kargs['cnxn'] = argv[2]
     if len(argv) > 3: kargs['debug'] = argv[3]
     test = RoboTest(**kargs)
